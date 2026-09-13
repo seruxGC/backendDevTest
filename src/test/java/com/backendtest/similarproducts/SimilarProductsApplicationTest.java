@@ -10,6 +10,7 @@ import com.backendtest.similarproducts.application.port.out.catalog.ProductCatal
 import com.backendtest.similarproducts.application.service.GetSimilarProductsService;
 import com.backendtest.similarproducts.config.ProductDetailsExecutorConfig;
 import com.backendtest.similarproducts.config.ProductsClientProperties;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -31,10 +32,15 @@ class SimilarProductsApplicationTest {
     @Autowired
     private ProductCatalogPort productCatalogPort;
 
+    @Autowired
+    private PoolingHttpClientConnectionManager productsConnectionManager;
+
     @Test
     void loadsProductionTopologyWithCriticalConfiguration() throws Exception {
         assertThat(properties.baseUrl()).isEqualTo(URI.create("http://localhost:3001"));
         assertThat(properties.maxConcurrencyPerRequest()).isEqualTo(10);
+        assertThat(productsConnectionManager.getMaxTotal()).isEqualTo(600);
+        assertThat(productsConnectionManager.getDefaultMaxPerRoute()).isEqualTo(600);
         assertThat(productDetailsExecutor.submit(() -> Thread.currentThread().isVirtual()).get()).isTrue();
         assertThat(getSimilarProductsUseCase).isInstanceOf(GetSimilarProductsService.class);
         assertThat(productCatalogPort).isNotNull();
