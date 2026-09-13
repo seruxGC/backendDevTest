@@ -1,7 +1,9 @@
 package com.backendtest.similarproducts.adapter.out.catalog.http;
 
-import java.util.ArrayList;
+import java.net.SocketTimeoutException;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import com.backendtest.similarproducts.application.port.out.catalog.ProductCatalogException;
 import com.backendtest.similarproducts.application.port.out.catalog.ProductCatalogFailure;
@@ -38,10 +40,7 @@ final class RestProductCatalogAdapter implements ProductCatalogPort {
         } catch (RestClientResponseException exception) {
             throw mapStatusException(exception);
         } catch (ResourceAccessException exception) {
-            throw new ProductCatalogException(
-                    ProductCatalogFailure.CONNECTION_ERROR,
-                    "Could not connect to the product catalog",
-                    exception);
+            throw mapResourceAccessException(exception);
         } catch (RestClientException | IllegalArgumentException exception) {
             throw invalidResponse(exception);
         }
@@ -61,10 +60,7 @@ final class RestProductCatalogAdapter implements ProductCatalogPort {
         } catch (RestClientResponseException exception) {
             throw mapStatusException(exception);
         } catch (ResourceAccessException exception) {
-            throw new ProductCatalogException(
-                    ProductCatalogFailure.CONNECTION_ERROR,
-                    "Could not connect to the product catalog",
-                    exception);
+            throw mapResourceAccessException(exception);
         } catch (RestClientException | IllegalArgumentException exception) {
             throw invalidResponse(exception);
         }
@@ -75,7 +71,7 @@ final class RestProductCatalogAdapter implements ProductCatalogPort {
             throw new IllegalArgumentException("Similar product IDs response must be an array");
         }
 
-        List<ProductId> productIds = new ArrayList<>(response.size());
+        Set<ProductId> productIds = LinkedHashSet.newLinkedHashSet(response.size());
         for (JsonNode node : response) {
             if (!node.isString() && !node.isIntegralNumber()) {
                 throw new IllegalArgumentException("Similar product ID must be a string or integer");
@@ -103,5 +99,29 @@ final class RestProductCatalogAdapter implements ProductCatalogPort {
                 ProductCatalogFailure.INVALID_RESPONSE,
                 "Product catalog returned an invalid response",
                 exception);
+    }
+
+    private ProductCatalogException mapResourceAccessException(ResourceAccessException exception) {
+        if (hasCause(exception, SocketTimeoutException.class)) {
+            return new ProductCatalogException(
+                    ProductCatalogFailure.TIMEOUT,
+                    "Product catalog request timed out",
+                    exception);
+        }
+        return new ProductCatalogException(
+                ProductCatalogFailure.CONNECTION_ERROR,
+                "Could not connect to the product catalog",
+                exception);
+    }
+
+    private boolean hasCause(Throwable exception, Class<? extends Throwable> causeType) {
+        Throwable cause = exception;
+        while (cause != null) {
+            if (causeType.isInstance(cause)) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 }
