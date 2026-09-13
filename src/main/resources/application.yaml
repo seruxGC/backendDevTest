@@ -6,6 +6,12 @@ spring:
     virtual:
       enabled: true
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+
 products:
   client:
     base-url: http://localhost:3001

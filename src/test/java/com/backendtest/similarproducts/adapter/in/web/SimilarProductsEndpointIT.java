@@ -58,6 +58,16 @@ class SimilarProductsEndpointIT {
         assertThat(response.body()).isEmpty();
     }
 
+    @Test
+    void exposesApplicationMetricsThroughActuator() throws Exception {
+        get("/product/1/similar");
+
+        HttpResponse<String> response = get("/actuator/metrics/similar.products.requests");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("similar.products.requests", "outcome");
+    }
+
     private HttpResponse<String> get(String path) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .GET()

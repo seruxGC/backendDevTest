@@ -47,7 +47,8 @@ class GetSimilarProductsServiceConcurrencyTest {
         try (ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
                 ExecutorService caller = Executors.newSingleThreadExecutor()) {
             CountingExecutor countingExecutor = new CountingExecutor(virtualExecutor);
-            GetSimilarProductsService service = new GetSimilarProductsService(catalog, countingExecutor, 2);
+            GetSimilarProductsService service =
+                    new GetSimilarProductsService(catalog, event -> {}, countingExecutor, 2);
 
             CompletableFuture<List<Product>> result = CompletableFuture.supplyAsync(
                     () -> service.getSimilarProducts(REQUESTED_ID), caller);
@@ -83,7 +84,8 @@ class GetSimilarProductsServiceConcurrencyTest {
 
         try (ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
                 ExecutorService caller = Executors.newSingleThreadExecutor()) {
-            GetSimilarProductsService service = new GetSimilarProductsService(catalog, virtualExecutor, 3);
+            GetSimilarProductsService service =
+                    new GetSimilarProductsService(catalog, event -> {}, virtualExecutor, 3);
             CompletableFuture<List<Product>> result = CompletableFuture.supplyAsync(
                     () -> service.getSimilarProducts(REQUESTED_ID), caller);
 
