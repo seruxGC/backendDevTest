@@ -1,0 +1,17 @@
+server:
+  port: 5000
+
+spring:
+  threads:
+    virtual:
+      enabled: true
+
+products:
+  client:
+    base-url: http://localhost:3001
+    connect-timeout: 1s
+    read-timeout: 7s
+    connection-request-timeout: 1s
+    max-concurrency-per-request: 10
+    max-connections: 600
+    max-connections-per-route: 600
