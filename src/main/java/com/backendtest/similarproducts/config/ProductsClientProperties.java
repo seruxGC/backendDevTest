@@ -11,6 +11,8 @@ public record ProductsClientProperties(
         Duration connectTimeout,
         Duration readTimeout,
         Duration connectionRequestTimeout,
+        Duration validateAfterInactivity,
+        Duration idleConnectionEvictTime,
         int maxConcurrencyPerRequest,
         int maxConnections,
         int maxConnectionsPerRoute) {

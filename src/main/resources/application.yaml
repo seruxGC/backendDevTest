@@ -18,6 +18,8 @@ products:
     connect-timeout: 1s
     read-timeout: 7s
     connection-request-timeout: 1s
+    validate-after-inactivity: 1s
+    idle-connection-evict-time: 5s
     max-concurrency-per-request: 10
     max-connections: 600
     max-connections-per-route: 600

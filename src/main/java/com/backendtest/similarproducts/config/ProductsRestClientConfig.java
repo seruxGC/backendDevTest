@@ -6,6 +6,7 @@ import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.Timeout;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,6 +23,7 @@ public class ProductsRestClientConfig {
             ProductsClientProperties properties) {
         ConnectionConfig connectionConfig = ConnectionConfig.custom()
                 .setConnectTimeout(Timeout.of(properties.connectTimeout()))
+                .setValidateAfterInactivity(TimeValue.of(properties.validateAfterInactivity()))
                 .build();
 
         return PoolingHttpClientConnectionManagerBuilder.create()
@@ -42,8 +44,9 @@ public class ProductsRestClientConfig {
 
         return HttpClients.custom()
                 .setConnectionManager(connectionManager)
-                .setConnectionManagerShared(true)
                 .setDefaultRequestConfig(requestConfig)
+                .evictExpiredConnections()
+                .evictIdleConnections(TimeValue.of(properties.idleConnectionEvictTime()))
                 .disableAutomaticRetries()
                 .build();
     }

@@ -44,6 +44,8 @@ class RestProductCatalogAdapterIT {
                 Duration.ofMillis(100),
                 Duration.ofMillis(100),
                 Duration.ofMillis(100),
+                Duration.ofMillis(100),
+                Duration.ofMillis(100),
                 3,
                 3,
                 3);
@@ -144,6 +146,22 @@ class RestProductCatalogAdapterIT {
         assertCatalogFailure(
                 () -> adapter.getSimilarProductIds(new ProductId("1")),
                 ProductCatalogFailure.CONNECTION_ERROR);
+    }
+
+    @Test
+    void evictsIdleConnections() throws Exception {
+        server.enqueue(jsonResponse("[]"));
+        adapter.getSimilarProductIds(new ProductId("1"));
+
+        assertThat(connectionManager.getTotalStats().getAvailable()).isEqualTo(1);
+
+        long deadline = System.nanoTime() + Duration.ofSeconds(3).toNanos();
+        while (connectionManager.getTotalStats().getAvailable() != 0
+                && System.nanoTime() < deadline) {
+            Thread.sleep(25);
+        }
+
+        assertThat(connectionManager.getTotalStats().getAvailable()).isZero();
     }
 
     private MockResponse jsonResponse(String body) {
