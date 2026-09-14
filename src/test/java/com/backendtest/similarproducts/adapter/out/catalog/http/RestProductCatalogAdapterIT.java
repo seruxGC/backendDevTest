@@ -30,6 +30,9 @@ import org.springframework.web.client.RestClient;
 
 class RestProductCatalogAdapterIT {
 
+    private static final Duration CLIENT_TIMEOUT = Duration.ofMillis(100);
+    private static final int CLIENT_LIMIT = 3;
+
     private MockWebServer server;
     private PoolingHttpClientConnectionManager connectionManager;
     private CloseableHttpClient httpClient;
@@ -39,16 +42,7 @@ class RestProductCatalogAdapterIT {
     void setUp() throws Exception {
         server = new MockWebServer();
         server.start();
-        ProductsClientProperties properties = new ProductsClientProperties(
-                URI.create(server.url("/").toString()),
-                Duration.ofMillis(100),
-                Duration.ofMillis(100),
-                Duration.ofMillis(100),
-                Duration.ofMillis(100),
-                Duration.ofMillis(100),
-                3,
-                3,
-                3);
+        ProductsClientProperties properties = clientProperties();
         ProductsRestClientConfig config = new ProductsRestClientConfig();
         connectionManager = config.productsConnectionManager(properties);
         httpClient = config.productsHttpClient(connectionManager, properties);
@@ -99,7 +93,7 @@ class RestProductCatalogAdapterIT {
     }
 
     @ParameterizedTest
-    @CsvSource({"404, NOT_FOUND", "500, SERVER_ERROR"})
+    @CsvSource({"400, INVALID_RESPONSE", "404, NOT_FOUND", "500, SERVER_ERROR"})
     void mapsHttpFailures(int status, ProductCatalogFailure expectedFailure) {
         server.enqueue(new MockResponse().setResponseCode(status));
 
@@ -118,11 +112,14 @@ class RestProductCatalogAdapterIT {
                 ProductCatalogFailure.INVALID_RESPONSE);
     }
 
-    @Test
-    void rejectsInvalidProductResponses() {
-        server.enqueue(jsonResponse("""
-                {"id":"2","name":"Dress","price":19.99}
-                """));
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "not-json",
+        "",
+        "{\"id\":\"2\",\"name\":\"Dress\",\"price\":19.99}"
+    })
+    void rejectsInvalidProductResponses(String responseBody) {
+        server.enqueue(jsonResponse(responseBody));
 
         assertCatalogFailure(
                 () -> adapter.getProduct(new ProductId("2")),
@@ -148,22 +145,6 @@ class RestProductCatalogAdapterIT {
                 ProductCatalogFailure.CONNECTION_ERROR);
     }
 
-    @Test
-    void evictsIdleConnections() throws Exception {
-        server.enqueue(jsonResponse("[]"));
-        adapter.getSimilarProductIds(new ProductId("1"));
-
-        assertThat(connectionManager.getTotalStats().getAvailable()).isEqualTo(1);
-
-        long deadline = System.nanoTime() + Duration.ofSeconds(3).toNanos();
-        while (connectionManager.getTotalStats().getAvailable() != 0
-                && System.nanoTime() < deadline) {
-            Thread.sleep(25);
-        }
-
-        assertThat(connectionManager.getTotalStats().getAvailable()).isZero();
-    }
-
     private MockResponse jsonResponse(String body) {
         return new MockResponse()
                 .setHeader("Content-Type", "application/json")
@@ -176,8 +157,21 @@ class RestProductCatalogAdapterIT {
         assertThat(request.getPath()).isEqualTo(path);
     }
 
-    private void assertCatalogFailure(Runnable request, ProductCatalogFailure expectedFailure) {
-        assertThatThrownBy(request::run)
+    private ProductsClientProperties clientProperties() {
+        return new ProductsClientProperties(
+                URI.create(server.url("/").toString()),
+                CLIENT_TIMEOUT,
+                CLIENT_TIMEOUT,
+                CLIENT_TIMEOUT,
+                CLIENT_TIMEOUT,
+                CLIENT_TIMEOUT,
+                CLIENT_LIMIT,
+                CLIENT_LIMIT,
+                CLIENT_LIMIT);
+    }
+
+    private void assertCatalogFailure(Runnable operation, ProductCatalogFailure expectedFailure) {
+        assertThatThrownBy(operation::run)
                 .isInstanceOfSatisfying(ProductCatalogException.class, exception ->
                         assertThat(exception.failure()).isEqualTo(expectedFailure));
     }

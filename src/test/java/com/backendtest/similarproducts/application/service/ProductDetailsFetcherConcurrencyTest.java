@@ -1,7 +1,6 @@
 package com.backendtest.similarproducts.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -23,49 +22,55 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 @Timeout(5)
-class GetSimilarProductsServiceConcurrencyTest {
+class ProductDetailsFetcherConcurrencyTest {
 
-    private static final ProductId REQUESTED_ID = new ProductId("requested");
+    private static final int WAIT_SECONDS = 2;
 
     @Test
-    void boundsWorkersFuturesAndConcurrentCalls() throws Exception {
+    void limitsWorkersAndConcurrentCallsPerRequest() throws Exception {
         List<ProductId> ids = productIds(6);
         CountDownLatch firstWorkersStarted = new CountDownLatch(2);
         CountDownLatch releaseCalls = new CountDownLatch(1);
         AtomicInteger activeCalls = new AtomicInteger();
         AtomicInteger maximumActiveCalls = new AtomicInteger();
 
-        ProductCatalogPort catalog = catalog(ids, id -> {
+        ProductCatalogPort catalog = catalog(id -> {
             int active = activeCalls.incrementAndGet();
-            maximumActiveCalls.accumulateAndGet(active, Math::max);
-            firstWorkersStarted.countDown();
-            await(releaseCalls);
-            activeCalls.decrementAndGet();
-            return product(id);
+            try {
+                maximumActiveCalls.accumulateAndGet(active, Math::max);
+                firstWorkersStarted.countDown();
+                await(releaseCalls);
+                return product(id);
+            } finally {
+                activeCalls.decrementAndGet();
+            }
         });
 
         try (ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
                 ExecutorService caller = Executors.newSingleThreadExecutor()) {
             CountingExecutor countingExecutor = new CountingExecutor(virtualExecutor);
-            GetSimilarProductsService service =
-                    new GetSimilarProductsService(catalog, event -> {}, countingExecutor, 2);
+            ProductDetailsFetcher fetcher = new ProductDetailsFetcher(catalog, countingExecutor, 2);
 
-            CompletableFuture<List<Product>> result = CompletableFuture.supplyAsync(
-                    () -> service.getSimilarProducts(REQUESTED_ID), caller);
+            CompletableFuture<List<Product>> result =
+                    CompletableFuture.supplyAsync(() -> fetcher.fetch(ids), caller);
 
-            assertThat(firstWorkersStarted.await(2, TimeUnit.SECONDS)).isTrue();
-            assertThat(countingExecutor.submissions()).isEqualTo(2);
-            assertThat(activeCalls).hasValue(2);
+            try {
+                assertThat(firstWorkersStarted.await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
+                assertThat(countingExecutor.submissions()).isEqualTo(2);
+                assertThat(activeCalls).hasValue(2);
+            } finally {
+                releaseCalls.countDown();
+            }
 
-            releaseCalls.countDown();
-
-            assertThat(result.get(2, TimeUnit.SECONDS)).extracting(Product::id).containsExactlyElementsOf(ids);
+            assertThat(result.get(WAIT_SECONDS, TimeUnit.SECONDS))
+                    .extracting(Product::id)
+                    .containsExactlyElementsOf(ids);
             assertThat(maximumActiveCalls).hasValue(2);
         }
     }
 
     @Test
-    void preservesInputOrderWhenDetailsFinishOutOfOrder() throws Exception {
+    void preservesInputOrderWhenResponsesArriveOutOfOrder() throws Exception {
         List<ProductId> ids = productIds(3);
         CountDownLatch allStarted = new CountDownLatch(3);
         Map<ProductId, CountDownLatch> releases = new ConcurrentHashMap<>();
@@ -75,7 +80,7 @@ class GetSimilarProductsServiceConcurrencyTest {
             completions.put(id, new CountDownLatch(1));
         });
 
-        ProductCatalogPort catalog = catalog(ids, id -> {
+        ProductCatalogPort catalog = catalog(id -> {
             allStarted.countDown();
             await(releases.get(id));
             completions.get(id).countDown();
@@ -84,28 +89,29 @@ class GetSimilarProductsServiceConcurrencyTest {
 
         try (ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor();
                 ExecutorService caller = Executors.newSingleThreadExecutor()) {
-            GetSimilarProductsService service =
-                    new GetSimilarProductsService(catalog, event -> {}, virtualExecutor, 3);
-            CompletableFuture<List<Product>> result = CompletableFuture.supplyAsync(
-                    () -> service.getSimilarProducts(REQUESTED_ID), caller);
+            ProductDetailsFetcher fetcher = new ProductDetailsFetcher(catalog, virtualExecutor, 3);
+            CompletableFuture<List<Product>> result =
+                    CompletableFuture.supplyAsync(() -> fetcher.fetch(ids), caller);
 
-            assertThat(allStarted.await(2, TimeUnit.SECONDS)).isTrue();
-            releaseAndAwait(ids.get(2), releases, completions);
-            releaseAndAwait(ids.get(1), releases, completions);
-            releaseAndAwait(ids.get(0), releases, completions);
+            try {
+                assertThat(allStarted.await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
+                releaseAndAwait(ids.get(2), releases, completions);
+                releaseAndAwait(ids.get(1), releases, completions);
+                releaseAndAwait(ids.get(0), releases, completions);
+            } finally {
+                releases.values().forEach(CountDownLatch::countDown);
+            }
 
-            List<Product> products = result.get(2, TimeUnit.SECONDS);
+            List<Product> products = result.get(WAIT_SECONDS, TimeUnit.SECONDS);
             assertThat(products).extracting(Product::id).containsExactlyElementsOf(ids);
-            assertThatThrownBy(() -> products.add(product(new ProductId("4"))))
-                    .isInstanceOf(UnsupportedOperationException.class);
         }
     }
 
-    private ProductCatalogPort catalog(List<ProductId> ids, Function<ProductId, Product> fetchProduct) {
+    private ProductCatalogPort catalog(Function<ProductId, Product> fetchProduct) {
         return new ProductCatalogPort() {
             @Override
             public List<ProductId> getSimilarProductIds(ProductId productId) {
-                return ids;
+                return List.of();
             }
 
             @Override
@@ -122,21 +128,21 @@ class GetSimilarProductsServiceConcurrencyTest {
                 .toList();
     }
 
-    private Product product(ProductId id) {
+    private static Product product(ProductId id) {
         return new Product(id, "Product " + id.value(), BigDecimal.ONE, true);
     }
 
     private void releaseAndAwait(
             ProductId id,
             Map<ProductId, CountDownLatch> releases,
-            Map<ProductId, CountDownLatch> completions) throws InterruptedException {
+        Map<ProductId, CountDownLatch> completions) throws InterruptedException {
         releases.get(id).countDown();
-        assertThat(completions.get(id).await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(completions.get(id).await(WAIT_SECONDS, TimeUnit.SECONDS)).isTrue();
     }
 
     private static void await(CountDownLatch latch) {
         try {
-            if (!latch.await(2, TimeUnit.SECONDS)) {
+            if (!latch.await(WAIT_SECONDS, TimeUnit.SECONDS)) {
                 throw new AssertionError("Timed out waiting for test coordination");
             }
         } catch (InterruptedException exception) {

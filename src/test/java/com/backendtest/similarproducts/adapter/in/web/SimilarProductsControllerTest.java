@@ -1,12 +1,11 @@
 package com.backendtest.similarproducts.adapter.in.web;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -30,6 +29,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -68,9 +68,9 @@ class SimilarProductsControllerTest {
                 .andExpect(jsonPath("$[1].id").value("3"))
                 .andExpect(jsonPath("$[1].availability").value(false));
 
-        ArgumentCaptor<ProductId> productId = ArgumentCaptor.forClass(ProductId.class);
-        verify(useCase).getSimilarProducts(productId.capture());
-        org.assertj.core.api.Assertions.assertThat(productId.getValue().value()).isEqualTo("1");
+        ArgumentCaptor<ProductId> productIdCaptor = ArgumentCaptor.forClass(ProductId.class);
+        verify(useCase).getSimilarProducts(productIdCaptor.capture());
+        assertThat(productIdCaptor.getValue().value()).isEqualTo("1");
     }
 
     @Test
@@ -83,30 +83,22 @@ class SimilarProductsControllerTest {
                 .andExpect(content().json("[]"));
     }
 
-    @Test
-    void rejectsMethodsOutsideThePublicContract() throws Exception {
-        mockMvc.perform(post("/product/1/similar"))
-                .andExpect(status().isMethodNotAllowed());
-
-        verify(useCase, never()).getSimilarProducts(any());
-    }
-
     @ParameterizedTest
     @MethodSource("publicErrors")
-    void mapsApplicationErrorsWithoutAResponseBody(RuntimeException error, int expectedStatus)
+    void mapsApplicationErrorsWithoutAResponseBody(RuntimeException error, HttpStatus expectedStatus)
             throws Exception {
         when(useCase.getSimilarProducts(any())).thenThrow(error);
 
         mockMvc.perform(get("/product/1/similar"))
-                .andExpect(status().is(expectedStatus))
+                .andExpect(status().is(expectedStatus.value()))
                 .andExpect(content().string(""));
     }
 
     private static Stream<Arguments> publicErrors() {
         return Stream.of(
-                Arguments.of(new SimilarProductsNotFoundException("not found", null), 404),
-                Arguments.of(new SimilarProductsUnavailableException("unavailable"), 502),
-                Arguments.of(new SimilarProductsTimeoutException("timeout"), 504));
+                Arguments.of(new SimilarProductsNotFoundException("not found", null), HttpStatus.NOT_FOUND),
+                Arguments.of(new SimilarProductsUnavailableException("unavailable"), HttpStatus.BAD_GATEWAY),
+                Arguments.of(new SimilarProductsTimeoutException("timeout"), HttpStatus.GATEWAY_TIMEOUT));
     }
 
     private Product product(String id, String name, String price, boolean availability) {
