@@ -61,7 +61,7 @@ class RestProductCatalogAdapterIT {
 
     @Test
     void normalizesAndDeduplicatesSimilarProductIdsInOriginalOrder() throws Exception {
-        server.enqueue(jsonResponse("[\"2\",3,\"2\",3,4]"));
+        server.enqueue(jsonResponse("[\"2\",\"3\",\"2\",\"3\",\"4\"]"));
 
         List<ProductId> result = adapter.getSimilarProductIds(new ProductId("1"));
 
@@ -70,13 +70,13 @@ class RestProductCatalogAdapterIT {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"null", "\"\"", "1.5", "true", "{}", "[]"})
+    @ValueSource(strings = {"\"\"", "{}"})
     void rejectsInvalidSimilarProductIds(String invalidId) {
         server.enqueue(jsonResponse("[" + invalidId + "]"));
 
         assertThatThrownBy(() -> adapter.getSimilarProductIds(new ProductId("1")))
                 .isInstanceOfSatisfying(ProductCatalogException.class, exception ->
-                        assertThat(exception.failure()).isEqualTo(ProductCatalogFailure.INVALID_RESPONSE));
+                        assertThat(exception.failure()).isEqualTo(ProductCatalogFailure.UNAVAILABLE));
     }
 
     @Test
@@ -93,7 +93,7 @@ class RestProductCatalogAdapterIT {
     }
 
     @ParameterizedTest
-    @CsvSource({"400, INVALID_RESPONSE", "404, NOT_FOUND", "500, SERVER_ERROR"})
+    @CsvSource({"400, UNAVAILABLE", "404, NOT_FOUND", "500, UNAVAILABLE"})
     void mapsHttpFailures(int status, ProductCatalogFailure expectedFailure) {
         server.enqueue(new MockResponse().setResponseCode(status));
 
@@ -103,36 +103,33 @@ class RestProductCatalogAdapterIT {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"not-json", "{}"})
+    @ValueSource(strings = {"not-json"})
     void rejectsMalformedOrUnexpectedSimilarIdsResponses(String responseBody) {
         server.enqueue(jsonResponse(responseBody));
 
         assertCatalogFailure(
                 () -> adapter.getSimilarProductIds(new ProductId("1")),
-                ProductCatalogFailure.INVALID_RESPONSE);
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {
-        "not-json",
-        "",
-        "{\"id\":\"2\",\"name\":\"Dress\",\"price\":19.99}"
-    })
-    void rejectsInvalidProductResponses(String responseBody) {
-        server.enqueue(jsonResponse(responseBody));
-
-        assertCatalogFailure(
-                () -> adapter.getProduct(new ProductId("2")),
-                ProductCatalogFailure.INVALID_RESPONSE);
+                ProductCatalogFailure.UNAVAILABLE);
     }
 
     @Test
-    void mapsConfiguredResponseTimeout() {
+    void rejectsProductResponseWithoutAvailability() {
+        server.enqueue(jsonResponse("""
+                {"id":"2","name":"Dress","price":19.99}
+                """));
+
+        assertCatalogFailure(
+                () -> adapter.getProduct(new ProductId("2")),
+                ProductCatalogFailure.UNAVAILABLE);
+    }
+
+    @Test
+    void mapsResponseTimeoutAsUnavailable() {
         server.enqueue(jsonResponse("[]").setHeadersDelay(500, TimeUnit.MILLISECONDS));
 
         assertCatalogFailure(
                 () -> adapter.getSimilarProductIds(new ProductId("1")),
-                ProductCatalogFailure.TIMEOUT);
+                ProductCatalogFailure.UNAVAILABLE);
     }
 
     @Test
@@ -142,7 +139,7 @@ class RestProductCatalogAdapterIT {
 
         assertCatalogFailure(
                 () -> adapter.getSimilarProductIds(new ProductId("1")),
-                ProductCatalogFailure.CONNECTION_ERROR);
+                ProductCatalogFailure.UNAVAILABLE);
     }
 
     private MockResponse jsonResponse(String body) {

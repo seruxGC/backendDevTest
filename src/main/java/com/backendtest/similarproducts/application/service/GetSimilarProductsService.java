@@ -3,7 +3,6 @@ package com.backendtest.similarproducts.application.service;
 import java.util.List;
 
 import com.backendtest.similarproducts.application.error.SimilarProductsNotFoundException;
-import com.backendtest.similarproducts.application.error.SimilarProductsTimeoutException;
 import com.backendtest.similarproducts.application.error.SimilarProductsUnavailableException;
 import com.backendtest.similarproducts.application.port.in.GetSimilarProductsUseCase;
 import com.backendtest.similarproducts.application.port.out.catalog.ProductCatalogException;
@@ -42,11 +41,8 @@ public final class GetSimilarProductsService implements GetSimilarProductsUseCas
             throw switch (exception.failure()) {
                 case NOT_FOUND -> new SimilarProductsNotFoundException(
                         "Product was not found: " + productId.value(), exception);
-                case TIMEOUT -> new SimilarProductsTimeoutException(
-                        "Timed out while retrieving similar product IDs", exception);
-                case SERVER_ERROR, CONNECTION_ERROR, INVALID_RESPONSE ->
-                        new SimilarProductsUnavailableException(
-                                "Could not retrieve similar product IDs", exception);
+                case UNAVAILABLE -> new SimilarProductsUnavailableException(
+                        "Could not retrieve similar product IDs", exception);
             };
         }
     }

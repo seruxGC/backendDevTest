@@ -1,7 +1,6 @@
 package com.backendtest.similarproducts.adapter.in.web;
 
 import com.backendtest.similarproducts.application.error.SimilarProductsNotFoundException;
-import com.backendtest.similarproducts.application.error.SimilarProductsTimeoutException;
 import com.backendtest.similarproducts.application.error.SimilarProductsUnavailableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,8 +20,4 @@ public final class SimilarProductsExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
     }
 
-    @ExceptionHandler(SimilarProductsTimeoutException.class)
-    ResponseEntity<Void> handleTimeout() {
-        return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).build();
-    }
 }

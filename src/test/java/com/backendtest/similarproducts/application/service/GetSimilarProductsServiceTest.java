@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import com.backendtest.similarproducts.application.error.SimilarProductsNotFoundException;
-import com.backendtest.similarproducts.application.error.SimilarProductsTimeoutException;
 import com.backendtest.similarproducts.application.error.SimilarProductsUnavailableException;
 import com.backendtest.similarproducts.application.port.out.catalog.ProductCatalogException;
 import com.backendtest.similarproducts.application.port.out.catalog.ProductCatalogFailure;
@@ -87,9 +86,6 @@ class GetSimilarProductsServiceTest {
     private static Stream<Arguments> similarIdsFailures() {
         return Stream.of(
                 Arguments.of(ProductCatalogFailure.NOT_FOUND, SimilarProductsNotFoundException.class),
-                Arguments.of(ProductCatalogFailure.TIMEOUT, SimilarProductsTimeoutException.class),
-                Arguments.of(ProductCatalogFailure.SERVER_ERROR, SimilarProductsUnavailableException.class),
-                Arguments.of(ProductCatalogFailure.CONNECTION_ERROR, SimilarProductsUnavailableException.class),
-                Arguments.of(ProductCatalogFailure.INVALID_RESPONSE, SimilarProductsUnavailableException.class));
+                Arguments.of(ProductCatalogFailure.UNAVAILABLE, SimilarProductsUnavailableException.class));
     }
 }

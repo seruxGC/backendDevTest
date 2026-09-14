@@ -71,7 +71,7 @@ class ProductDetailsFetcherTest {
     }
 
     private ProductCatalogException catalogFailure() {
-        return new ProductCatalogException(ProductCatalogFailure.SERVER_ERROR, "Catalog failure");
+        return new ProductCatalogException(ProductCatalogFailure.UNAVAILABLE, "Catalog failure");
     }
 
     private Product product(ProductId id) {

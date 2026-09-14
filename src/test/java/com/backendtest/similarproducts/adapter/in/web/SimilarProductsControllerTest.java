@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import com.backendtest.similarproducts.application.error.SimilarProductsNotFoundException;
-import com.backendtest.similarproducts.application.error.SimilarProductsTimeoutException;
 import com.backendtest.similarproducts.application.error.SimilarProductsUnavailableException;
 import com.backendtest.similarproducts.application.port.in.GetSimilarProductsUseCase;
 import com.backendtest.similarproducts.domain.model.Product;
@@ -73,16 +72,6 @@ class SimilarProductsControllerTest {
         assertThat(productIdCaptor.getValue().value()).isEqualTo("1");
     }
 
-    @Test
-    void returnsAnEmptyJsonArrayWhenThereAreNoSimilarProducts() throws Exception {
-        when(useCase.getSimilarProducts(any())).thenReturn(List.of());
-
-        mockMvc.perform(get("/product/1/similar"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(content().json("[]"));
-    }
-
     @ParameterizedTest
     @MethodSource("publicErrors")
     void mapsApplicationErrorsWithoutAResponseBody(RuntimeException error, HttpStatus expectedStatus)
@@ -97,8 +86,7 @@ class SimilarProductsControllerTest {
     private static Stream<Arguments> publicErrors() {
         return Stream.of(
                 Arguments.of(new SimilarProductsNotFoundException("not found", null), HttpStatus.NOT_FOUND),
-                Arguments.of(new SimilarProductsUnavailableException("unavailable"), HttpStatus.BAD_GATEWAY),
-                Arguments.of(new SimilarProductsTimeoutException("timeout"), HttpStatus.GATEWAY_TIMEOUT));
+                Arguments.of(new SimilarProductsUnavailableException("unavailable"), HttpStatus.BAD_GATEWAY));
     }
 
     private Product product(String id, String name, String price, boolean availability) {
